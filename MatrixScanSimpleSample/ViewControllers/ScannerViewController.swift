@@ -21,11 +21,18 @@ class ScannerViewController: UIViewController {
     private var barcodeTracking: BarcodeTracking!
     private var captureView: DataCaptureView!
     private var overlay: BarcodeTrackingBasicOverlay!
+    private var feedback: Feedback?
 
     private var results: [String: Barcode] = [:]
 
+    @objc static func instantiate() -> ScannerViewController {
+        let storyboard = UIStoryboard.init(name: "Main", bundle: nil)
+        return storyboard.instantiateViewController(withIdentifier: "ScannerVC") as! ScannerViewController
+    }
+
     override func viewDidLoad() {
         super.viewDidLoad()
+        feedback = Feedback.default
         setupRecognition()
     }
 
@@ -60,6 +67,10 @@ class ScannerViewController: UIViewController {
 
     @IBAction func unwindToScanner(segue: UIStoryboardSegue) {}
 
+    @IBAction func handleDoneButtonTapped(_ sender: Any) {
+        self.dismiss(animated: true, completion: nil)
+    }
+
     private func setupRecognition() {
         // Create data capture context using your license key.
         context = DataCaptureContext.licensed
@@ -74,7 +85,10 @@ class ScannerViewController: UIViewController {
         // The preferred resolution is automatically chosen, which currently defaults to HD on all devices.
         // Setting the preferred resolution to full HD helps to get a better decode range.
         let cameraSettings = BarcodeTracking.recommendedCameraSettings
-        cameraSettings.preferredResolution = .fullHD
+        cameraSettings.preferredResolution = .uhd4k
+        cameraSettings.zoomFactor = 1.0
+        cameraSettings.zoomGestureZoomFactor = 3.5
+        cameraSettings.focusGestureStrategy = .autoOnLocation
         camera?.apply(cameraSettings, completionHandler: nil)
 
         // The barcode tracking process is configured through barcode tracking settings
@@ -84,11 +98,12 @@ class ScannerViewController: UIViewController {
         // The settings instance initially has all types of barcodes (symbologies) disabled. For the purpose of this
         // sample we enable a very generous set of symbologies. In your own app ensure that you only enable the
         // symbologies that your app requires as every additional enabled symbology has an impact on processing times.
-        settings.set(symbology: .ean13UPCA, enabled: true)
-        settings.set(symbology: .ean8, enabled: true)
-        settings.set(symbology: .upce, enabled: true)
-        settings.set(symbology: .code39, enabled: true)
-        settings.set(symbology: .code128, enabled: true)
+//        settings.set(symbology: .ean13UPCA, enabled: true)
+//        settings.set(symbology: .ean8, enabled: true)
+//        settings.set(symbology: .upce, enabled: true)
+//        settings.set(symbology: .code39, enabled: true)
+//        settings.set(symbology: .code128, enabled: true)
+        settings.set(symbology: .qr, enabled: true)
 
         // Create new barcode tracking mode with the settings from above.
         barcodeTracking = BarcodeTracking(context: context, settings: settings)
@@ -106,7 +121,49 @@ class ScannerViewController: UIViewController {
 
         // Add a barcode tracking overlay to the data capture view to render the tracked barcodes on top of the video
         // preview. This is optional, but recommended for better visual feedback.
+        let startTime = NSDate()
+
         overlay = BarcodeTrackingBasicOverlay(barcodeTracking: barcodeTracking, view: captureView)
+
+        let endTime = NSDate()
+        let executionTime = endTime.timeIntervalSince(startTime as Date)
+        print("Time to create BarcodeTrackingBasicOverlay: \(executionTime)")
+    }
+}
+
+// MARK: - Brush extension
+
+fileprivate extension Brush {
+    static let rejected: Brush = {
+        let red = UIColor(red: 255/255, green: 57/255, blue: 57/255, alpha: 1)
+        return Brush(fill: red.withAlphaComponent(0.3), stroke: red, strokeWidth: 1)
+    }()
+
+    static let accepted: Brush = {
+        let green = UIColor(red: 57/255, green: 255/255, blue: 57/255, alpha: 1)
+        return Brush(fill: green.withAlphaComponent(0.3), stroke: green, strokeWidth: 1)
+    }()
+}
+
+// MARK: - BarcodeTrackingBasicOverlayDelegate
+
+extension ScannerViewController: BarcodeTrackingBasicOverlayDelegate {
+    func barcodeTrackingBasicOverlay(_ overlay: BarcodeTrackingBasicOverlay,
+                                     brushFor trackedBarcode: TrackedBarcode) -> Brush? {
+        if trackedBarcode.barcode.shouldReject() {
+            return .rejected
+        }
+        return .accepted
+    }
+
+    func barcodeTrackingBasicOverlay(_ overlay: BarcodeTrackingBasicOverlay, didTap trackedBarcode: TrackedBarcode) {}
+}
+
+// MARK: - Barcode extension
+
+fileprivate extension Barcode {
+    func shouldReject() -> Bool {
+        return false
     }
 }
 
@@ -120,6 +177,9 @@ extension ScannerViewController: BarcodeTrackingListener {
         DispatchQueue.main.async { [weak self] in
             barcodes.forEach {
                 if let self = self, let data = $0.data, !data.isEmpty {
+                    if self.results[data] == nil {
+                        self.feedback?.emit()
+                    }
                     self.results[data] = $0
                 }
             }
