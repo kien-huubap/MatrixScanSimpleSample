@@ -9,11 +9,14 @@
 import UIKit
 
 class MainViewController: UIViewController {
+    var scannerViewController: ScannerViewController?
 
     @IBAction func handleScanButtonTapped(_ sender: Any) {
-        let scannerViewController = ScannerViewController.instantiate()
-        scannerViewController.modalPresentationStyle = .fullScreen
-        self.present(scannerViewController, animated: true, completion: nil)
+        if scannerViewController == nil {
+            scannerViewController = ScannerViewController.instantiate()
+        }
+        scannerViewController!.modalPresentationStyle = .fullScreen
+        self.present(scannerViewController!, animated: true, completion: nil)
 //
 //        ScannerViewController.instantiate()
 //        self.scannerViewController?.delegate = self
